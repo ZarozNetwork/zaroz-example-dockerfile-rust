@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image the way Zaroz does (from the Dockerfile)
+        run: docker build -t example .
+      - name: Smoke test
+        run: |
+          docker run -d --name example -p 8080:8080 example
+          for _ in $(seq 20); do curl -fsS localhost:8080/healthz && break; sleep 0.5; done
+          curl -fsS localhost:8080/
+          docker stop example
+          test "$(docker inspect -f '{{.State.ExitCode}}' example)" = 0
